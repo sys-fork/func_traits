@@ -1,12 +1,15 @@
 #include <type_traits>
 
-template <class T>
+template <class>
 struct func_traits;
 
-namespace func_traits_impl {
+struct func_traits_impl {
     template <class ...>
-    struct pack {};
-    
+    struct pack {
+        virtual ~pack() = 0;
+    };
+
+protected:
     template <std::size_t, class>
     struct Args_N;
 
@@ -15,7 +18,7 @@ namespace func_traits_impl {
         : public Args_N<N - 1, pack<Tail...>> {};
 
     template <class Head, class ...Tail>
-    struct Args_N<0,pack<Head, Tail...>> {
+    struct Args_N<0, pack<Head, Tail...>> {
         using type = Head;
     };
 
@@ -42,17 +45,28 @@ namespace func_traits_impl {
     template <class Func_type>
     struct func_validation
         : func_validation_impl<Func_type, typename func_traits<Func_type>::args_pack> {};
-}
+
+    virtual ~func_traits_impl() = 0;
+};
 
 template <class Ret, class ...Args>
-struct func_traits<Ret(Args...)> {
+struct func_traits<Ret(Args...)> : public func_traits_impl {
 public:
     using ret = Ret;
-    static constexpr std::size_t len = func_traits_impl::length<0, func_traits_impl::pack<Args...>>::value;
+    static constexpr std::size_t len = length<0, pack<Args...>>::value;
     static constexpr std::size_t len1 = sizeof...(Args);
     template <std::size_t N>
-    using args = typename func_traits_impl::Args_N<N, func_traits_impl::pack<Args...>>::type;
-    using args_pack = func_traits_impl::pack<Args...>;
-    static constexpr bool validation = func_traits_impl::func_validation<Ret(Args...)>::value;
+    using args = typename Args_N<N, pack<Args...>>::type;
+    using args_pack = pack<Args...>;
+    static constexpr bool validation = func_validation<Ret(Args...)>::value;
+    virtual ~func_traits() = 0;
 };
+
+func_traits_impl::~func_traits_impl() {}
+
+template <class ...Ts>
+func_traits_impl::pack<Ts...>::~pack() {}
+
+template <class Ret, class ...Args>
+func_traits<Ret(Args...)>::~func_traits() {}
 
