@@ -44,7 +44,7 @@ typename func_traits<decltype(fn)>::args_pack
 ```
 ここで `decltype(fn)` が `Ret(Args...)` であるとき，上の式の型は
 ```cpp
-func_traits_impl::pack<Args...>
+func_traits_utils::pack<Args...>
 ```
 となる．ここで pack は
 ```cpp
@@ -62,7 +62,7 @@ template <class>
 struct metafunc_impl;
 
 template <class ...Args>
-struct metafunc_impl<func_traits_impl::pack<Args...>> {
+struct metafunc_impl<func_traits_utils::pack<Args...>> {
     /* do something like this: std::declval<Args>... */
 };
 
