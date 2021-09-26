@@ -17,7 +17,7 @@ struct func_traits {
         template <class Head, class ...Tail>
         struct Args_N<0, pack<Head, Tail...>> {
             using type = Head;
-    };
+        };
     };
 
     template <class, class ...>
