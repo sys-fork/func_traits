@@ -10,21 +10,18 @@ namespace fntraits {
         template <class, class, class = std::void_t<>>
         struct func_validation : std::false_type {};
 
-        // (1) プライマリテンプレート
-        // ラムダ式，ジェネリックラムダ式および関数ポインタを受け取る
         template <class Lambda, class ...RequiredArgs>
         struct func_validation
         <Lambda, pack<RequiredArgs...>,
             std::void_t<decltype(std::declval<Lambda>()(std::declval<RequiredArgs>()...))>
         > : std::true_type {};
         
-        // (2) 部分特殊化
-        // 通常関数の型は関数ポインタに変換され (1) にリダイレクトされる
-        template <class Ret, class ...Args, class RequiredArgs>
-        struct func_validation<Ret(Args...), RequiredArgs> : func_validation<Ret(*)(Args...), RequiredArgs> {};
+        template <class Ret, class ...Args, class ...RequiredArgs>
+        struct func_validation
+        <Ret(Args...), pack<RequiredArgs...>, 
+            std::void_t<decltype(std::declval<Ret(*)(Args...)>()(std::declval<RequiredArgs>()...))>
+        > : std::true_type {};
 
-        // (3) 部分特殊化
-        // メンバ関数は .* または ->* 演算子を用いて呼び出さなければならないので特殊化している
         template <class Ret, class C, class ...Args, class ...RequiredArgs>
         struct func_validation
         <Ret(C::*)(Args...), pack<RequiredArgs...>,
@@ -78,17 +75,17 @@ namespace fntraits {
     };
 
     template <class Func, class ...RequiredArgs>
-    struct inspect : virtual protected utility {
+    struct inspect_impl : virtual protected utility {
         static constexpr bool validation = func_validation<Func, pack<RequiredArgs...>>::value;
         static constexpr bool exception = func_exception<Func, RequiredArgs...>::value;
         using ret = typename func_decltype<Func, RequiredArgs...>::type;
     };
 
     template <class Lambda>
-    struct inspect<Lambda> : inspect<decltype(&std::remove_reference_t<Lambda>::operator())> {};
+    struct inspect_impl<Lambda> : inspect_impl<decltype(&Lambda::operator())> {};
 
     template <class Ret, class ...Args>
-    struct inspect<Ret(Args...)> : virtual protected utility {
+    struct inspect_impl<Ret(Args...)> : virtual protected utility {
         static constexpr bool exception = func_exception<Ret(Args...), Args...>::value;
         using ret = Ret;
         static constexpr std::size_t len = sizeof...(Args);
@@ -98,15 +95,39 @@ namespace fntraits {
     };
 
     template <class Ret, class ...Args>
-    struct inspect<Ret(*)(Args...)> : inspect<Ret(Args...)> {};
+    struct inspect_impl<Ret(*)(Args...)> : inspect_impl<Ret(Args...)> {};
 
     template <class Ret, class C, class ...Args>
-    struct inspect<Ret(C::*)(Args...)> : inspect<Ret(Args...)>, virtual protected utility {
+    struct inspect_impl<Ret(C::*)(Args...)> : inspect_impl<Ret(Args...)>, virtual protected utility {
         static constexpr bool exception = func_exception<Ret(C::*)(Args...), Args...>::value;
     };
 
     template <class Ret, class C, class ...Args>
-    struct inspect<Ret(C::*)(Args...) const> : inspect<Ret(C::*)(Args...)> {};
+    struct inspect_impl<Ret(C::*)(Args...) const> : inspect_impl<Ret(C::*)(Args...)> {};
+
+    template <class T>
+    struct remove_modification {
+        using type = T;
+    };
+
+    template <class T>
+    struct remove_modification<T&> : remove_modification<T> {};
+
+    template <class T>
+    struct remove_modification<T&&> : remove_modification<T> {};
+
+    template <class T>
+    struct remove_modification<T const *> : remove_modification<T> {};
+
+    template<class T>
+    struct remove_modification<const T> : remove_modification<T> {};
+
+    template <class T>
+    struct remove_modification<T **> : remove_modification<T> {};
+
+    template <class Func, class ...RequiredArgs>
+    struct inspect
+        : inspect_impl<typename remove_modification<Func>::type, RequiredArgs...> {};
 
     template <class Func, class ...RequiredArgs>
     static constexpr bool validation = inspect<Func, RequiredArgs...>::validation;
