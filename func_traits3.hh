@@ -117,7 +117,7 @@ namespace fntraits {
     struct remove_modification<T&&> : remove_modification<T> {};
 
     template <class T>
-    struct remove_modification<T const *> : remove_modification<T> {};
+    struct remove_modification<T const *> : remove_modification<T *> {};
 
     template<class T>
     struct remove_modification<const T> : remove_modification<T> {};
