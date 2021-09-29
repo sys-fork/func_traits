@@ -1,72 +1,85 @@
-## 関数の型から戻り値や引数の型，引数の個数などを取得するためのメタ関数
+## 関数や関数オブジェクトの特性を取得するメタ関数
 
 C++17 に対応している．
 
 ### 定義
 ```cpp
-template <class>
-struct func_traits;
+template <class Func, class ...RequiredArgs>
+struct fntraits::is_callable_with;
 
-template <class Ret, class ...Args>
-struct func_traits<Ret(Args...)> { /* implementation */ };
+template <class Func, class ...RequiredArgs>
+struct fntraits::noexception;
 ```
 
-特性を調べたい関数が
+特性を調べたい関数，ラムダ式，ジェネリックラムダ式
+がそれぞれ
 ```cpp
-fn(a, b, ...)
+void f(int, int) {}
+auto lambda = [](int, int){};
+auto generic_lambda = [](auto, auto){};
 ```
-であるとする．なお，`fn` は通常の関数か静的メンバ関数でなければならない．ラムダ式やテンプレート関数には対応していない．
+であるとする．
 
-### 戻り値の型を取得する
+### 指定の引数で呼び出し可能か調べる
 ```cpp
-typename func_traits<decltype(fn)>::ret
-```
-
-### 引数の個数を取得する
-```cpp
-func_traits<decltype(fn)>::len
-```
-
-### N 番目の引数の型を取得する
-```cpp
-typename func_traits<decltype(fn)>::template args<N>
-```
-なお，0番目の引数とは a のことを指す．
-
-### 関数のバリデーションを取得する
-```cpp
-func_traits<decltype(fn)>::validation
+bool is_f_callable_with = fntraits::is_callable_with<decltype(f), int, int>::value;
+bool is_lambda_callable_with
+    = fntraits::is_callable_with<decltype(lambda), int, int>::value;
+bool is_generic_lambda_callable_with
+    = fntraits::is_callable_with<decltype(generic_lambda), int, int>::value;
 ```
 
-### 引数型のリストを取得する
+### 例外を送出するかしらべる
 ```cpp
-typename func_traits<decltype(fn)>::args_pack
+bool is_f_safe = fntraits::noexception<decltype(f)>::value;
+bool is_lambda_safe_with
+    = fntraits::noexception<decltype(lambda), int, int>::value;
+bool is_generic_lambda_safe_with
+    = fntraits::noexception<decltype(generic_lambda), int, int>::value;
 ```
-ここで `decltype(fn)` が `Ret(Args...)` であるとき，上の式の型は
+
+### 使用例
+今まで
 ```cpp
-func_traits_utils::pack<Args...>
+template <class Func, class ...Args>
+decltype(auto) forward(Func func, Args&&... args)
+    -> noexcept(noexcept(func(std::forward<Args>(args)...)))
+{
+    return func(std::forward<Args>(args)...);
+}
 ```
-となる．ここで pack は
+と書いてきたコードは
 ```cpp
-template <class ...>
-struct pack {};
+template <class Func, class ...Args>
+decltype(auto) forward(Func func, Args&&... args)
+    -> noexcept(fntraits::noexception_v<Func, Args...>)
+{
+    return func(std::forward<Args>(args)...);
+}
 ```
-のように定義されたクラスで，任意個の型テンプレートパラメータを
-受け取る．
+と書くことが出来ます．
 
-例えばこれは関数の引数の型をテンプレートパラメータリストとして
-取得したいときに便利である．すなわち，ある関数に関する
-何らかのメタ関数 `metafunc` を実装するにあたって，関数の引数の型をテンプレートパラメータとして取得したいときは，次のようにすればよい．
+また，以下のような SFINAE を用いた複雑なコードを簡単に実現できます．
 ```cpp
-template <class>
-struct metafunc_impl;
+template <class Func1, class Func2, class ...Args>
+auto call_if(Func1 func1, Func2 func2, Args&&... args)
+    -> typename std::enable_if<
+        fntraits::is_callable_with_v<Func1, Args...>
+        && !fntraits::is_callable_with_v<Func2, Args...>,
+        fntraits::ret_type_t<Func1, Args...>
+    >::type
+{
+    return func1(std::forward<Args>(args)...);
+}
 
-template <class ...Args>
-struct metafunc_impl<func_traits_utils::pack<Args...>> {
-    /* do something like this: std::declval<Args>... */
-};
-
-template <class Fn>
-struct metafunc
-    : metafunc_impl<typename func_traits<Fn>::args_pack> {};
+template <class Func1, class Func2, class ...Args>
+auto call_if(Func1 func1, Func2 func2, Args&&... args)
+    -> typename std::enable_if<
+        !fntraits::is_callable_with_v<Func1, Args...>
+        && fntraits::is_callable_with_v<Func2, Args...>,
+        fntraits::ret_type_t<Func2, Args...>
+    >::type
+{
+    return func2(std::forward<Args>(args)...);
+}
 ```
